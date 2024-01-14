@@ -29,42 +29,39 @@ namespace ReadWriteLock {
         }
 
         static void WriteUnLock() {
-            if (Interlocked.Decrement(ref writeCount) == 0)
-                Interlocked.Exchange(ref flag, empty);
+            if (writeCount > 0) 
+            {
+                if (--writeCount == 0)
+                    Interlocked.Exchange(ref flag, empty);
+            }
         }
 
         static void ReadLock() {
-            bool isReading = false;
-            if ((Volatile.Read(ref flag) & writeFlag) != 0) {
+            if ((flag & writeFlag) != empty) {
                 readCount++;
                 return ;
             }
 
             while (true) {
-                for (int i = 0; i < MAX_SPIN_COUNT && (Volatile.Read(ref flag) & writeFlag) == 0; i++) {
-                    try { }
-                    finally {
+                for (int i = 0; i < MAX_SPIN_COUNT && (flag & writeFlag) == 0; i++) {
                         int expectedValue = flag & readFlag;
                         if (Interlocked.CompareExchange(ref flag, expectedValue + 1, expectedValue) == expectedValue) {
                             readCount = 1;
-                            isReading = true;
-                        
+                            return ;
                         }
-                    }
-                    if (isReading) { return ; }
                 }
                 Thread.Yield();
             }
         }
 
         static void ReadUnLock() {
-            if (--readCount < 0) {
-                Interlocked.Exchange(ref readCount, empty);
-            }
-            else if (readCount == 0) {
-                Interlocked.Exchange(ref flag, flag & writeFlag);
+            if (readCount > 0)
+            {
+                if (--readCount == 0)
+                    Interlocked.Exchange(ref flag, flag & writeFlag);
             }
         }
+        
         static void Increase() {
             for (int i = 0; i < 10000000; i++) {
                 WriteLock();
